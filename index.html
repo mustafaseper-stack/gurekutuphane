@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>MEB Okul Kütüphane Barkod & Excel Aracı</title>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                    }
+                }
+            }
+        };
+    </script>
+
+    <!-- HTML5-QRCode v2.3.8 (Kamera ile Barkod Okuma) -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+    <!-- SheetJS (Excel .xlsx Oluşturma) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        /* iOS Safari video görünümü ve dokunmatik iyileştirmeler */
+        html, body {
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+        }
+        #qr-reader {
+            width: 100% !important;
+            border: none !important;
+        }
+        #qr-reader video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+            border-radius: 0.75rem;
+        }
+        /* Kütüphanenin varsayılan gizli kontrollerini kapat */
+        #qr-reader__dashboard,
+        #qr-reader__header_message {
+            display: none !important;
+        }
+        /* Başarılı tarama yeşil parlama animasyonu */
+        @keyframes scanFlash {
+            0% { opacity: 0.65; }
+            100% { opacity: 0; }
+        }
+        .animate-scan-flash {
+            animation: scanFlash 0.45s ease-out forwards;
+        }
+        /* Özel ince kaydırma çubuğu */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen pb-24">
+
+    <!-- ÜST BAŞLIK (HEADER) -->
+    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-6xl mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="bg-white/15 p-2 rounded-xl shrink-0">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                    </svg>
+                </div>
+                <div class="truncate">
+                    <h1 class="text-sm sm:text-lg font-bold leading-tight truncate">MEB Kütüphane Barkod Aracı</h1>
+                    <p class="text-[11px] sm:text-xs text-indigo-200 truncate">iPad / iPhone Safari Uyumlu &amp; Türkçe Künye</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <!-- Toplu ISBN Modal Butonu -->
+                <button id="btnOpenBulkModal" type="button" class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 active:scale-95 transition text-white text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="hidden sm:inline">Toplu Yapıştır</span>
+                    <span class="sm:hidden">Toplu</span>
+                </button>
+
+                <!-- Listeyi Temizle -->
+                <button id="btnClearAll" type="button" class="flex items-center gap-1.5 bg-rose-500 hover:bg-rose-600 active:scale-95 transition text-white text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span class="hidden sm:inline">Temizle</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ÜST TOAST BİLDİRİM ALANI (iOS klavye / alt çubukla çakışmaması için üstte) -->
+    <div id="toastContainer" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-[92%] max-w-md pointer-events-none"></div>
+
+    <!-- ANA İÇERİK -->
+    <main class="max-w-6xl mx-auto px-3 sm:px-4 pt-3 sm:pt-4 space-y-4">
+
+        <!-- CANLI SAYAÇLAR -->
+        <section class="grid grid-cols-3 gap-2.5 sm:gap-4">
+            <div class="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80">
+                <div class="flex items-center justify-between gap-1">
+                    <span class="text-[11px] sm:text-xs font-medium text-slate-500">Toplam Kitap</span>
+                    <span id="statPackages" class="text-[10px] sm:text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">1 paket</span>
+                </div>
+                <div id="statTotal" class="text-2xl sm:text-3xl font-bold text-indigo-700 mt-1">0</div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80">
+                <span class="text-[11px] sm:text-xs font-medium text-slate-500">Künyesi Bulunan</span>
+                <div id="statFound" class="text-2xl sm:text-3xl font-bold text-emerald-600 mt-1">0</div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200/80">
+                <span class="text-[11px] sm:text-xs font-medium text-slate-500">Bulunamayan</span>
+                <div id="statMissing" class="text-2xl sm:text-3xl font-bold text-amber-600 mt-1">0</div>
+            </div>
+        </section>
+
+        <!-- ÜST KONTROL: KAMERA + MANUEL GİRİŞ (iPad yatayda yan yana, mobilde alt alta) -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+            <!-- SOL / ÜST: KAMERA BARKOD TARAYICI -->
+            <div class="lg:col-span-7 bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden flex flex-col">
+                <!-- Hızlı Mod Anahtarları -->
+                <div class="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs sm:text-sm">
+                    <!-- Çoklu Nüsha (Varsayılan Açık) -->
+                    <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                        <div class="relative">
+                            <input type="checkbox" id="toggleAllowDuplicates" checked class="sr-only peer">
+                            <div class="w-10 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </div>
+                        <span class="font-semibold text-slate-700">Aynı Kitaba İzin Ver (Çoklu Nüsha)</span>
+                    </label>
+
+                    <!-- Sadece ISBN Modu (Ultra Hızlı) -->
+                    <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                        <div class="relative">
+                            <input type="checkbox" id="toggleIsbnOnlyMode" class="sr-only peer">
+                            <div class="w-10 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                        </div>
+                        <span class="font-semibold text-slate-700">Sadece ISBN Modu (Ultra Hızlı)</span>
+                    </label>
+                </div>
+
+                <!-- Kamera Video Alanı -->
+                <div class="p-3.5 space-y-3 flex-1 flex flex-col">
+                    <div id="cameraWrapper" class="relative bg-slate-900 rounded-2xl overflow-hidden min-h-[230px] sm:min-h-[280px] flex items-center justify-center transition-all duration-200 ring-0">
+                        <!-- html5-qrcode video konteyneri -->
+                        <div id="qr-reader" class="w-full h-full"></div>
+
+                        <!-- Başarılı Tarama Yeşil Parlama Katmanı -->
+                        <div id="scanFlashOverlay" class="pointer-events-none absolute inset-0 bg-emerald-400 opacity-0 z-20"></div>
+
+                        <!-- Kamera Kapalıyken Gösterilen Alan -->
+                        <div id="cameraPlaceholder" class="text-center p-6 space-y-2.5 z-10">
+                            <div class="w-14 h-14 mx-auto bg-slate-800 text-indigo-400 rounded-2xl flex items-center justify-center">
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 7V5a2 2 0 012-2h2m10 0h2a2 2 0 012 2v2m0 10v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10M9 8v8m3-8v8m3-8v8" />
+                                </svg>
+                            </div>
+                            <p class="text-slate-100 font-semibold text-sm sm:text-base">Kesintisiz Seri Barkod Tarama</p>
+                            <p class="text-slate-400 text-xs max-w-xs mx-auto leading-relaxed">
+                                Arka kamerayı başlatıp kitap barkodlarını yatay çerçeveye tutun. Her kitaptan sonra kamera kapanmaz, seri okutmaya devam eder.
+                            </p>
+                        </div>
+
+                        <!-- Aktif Durum Rozeti -->
+                        <div id="cameraStatusBadge" class="hidden absolute top-3 left-3 z-20 bg-emerald-600/90 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow">
+                            <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                            <span>Kesintisiz Tarama Aktif</span>
+                        </div>
+
+                        <!-- Bip Sesi Aç/Kapat Mini Butonu -->
+                        <button id="btnToggleSound" type="button" title="Bip Sesini Aç/Kapat" class="absolute top-3 right-3 z-20 bg-slate-900/70 hover:bg-slate-900 text-white p-2 rounded-xl backdrop-blur-sm transition">
+                            <svg id="iconSoundOn" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z" />
+                            </svg>
+                            <svg id="iconSoundOff" class="w-4 h-4 hidden text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Kamera Hata Kutusu -->
+                    <div id="cameraErrorBox" class="hidden bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm p-3 rounded-xl leading-relaxed"></div>
+
+                    <!-- Büyük Dokunmatik Kamera Kontrolleri -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button id="btnStartCamera" type="button" class="col-span-2 sm:col-span-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] transition text-white font-semibold py-3.5 px-4 rounded-xl shadow-sm flex items-center justify-center gap-2 text-sm sm:text-base">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Kamerayı Başlat
+                        </button>
+
+                        <button id="btnStopCamera" type="button" class="hidden col-span-2 sm:col-span-2 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] transition text-white font-semibold py-3.5 px-4 rounded-xl shadow-sm flex items-center justify-center gap-2 text-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                            </svg>
+                            Durdur
+                        </button>
+
+                        <button id="btnRefreshCamera" type="button" class="hidden bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition text-slate-700 font-semibold py-3.5 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs sm:text-sm">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Yenile
+                        </button>
+
+                        <button id="btnTorch" type="button" class="hidden bg-amber-100 hover:bg-amber-200 active:scale-[0.98] transition text-amber-900 font-semibold py-3.5 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs sm:text-sm">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <span id="torchLabel">Flaş</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SAĞ / ALT: MANUEL GİRİŞ VE HIZLI İŞLEMLER -->
+            <div class="lg:col-span-5 flex flex-col gap-4">
+                <!-- Manuel ISBN Girişi -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-bold text-slate-800">Manuel ISBN / USB Okuyucu</h2>
+                        <span id="queueStatusBadge" class="hidden text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full"></span>
+                    </div>
+                    <form id="manualForm" class="flex gap-2">
+                        <input type="text" id="manualIsbnInput" inputmode="numeric" autocomplete="off"
+                            placeholder="9789750719387"
+                            class="flex-1 min-w-0 px-3.5 py-3 rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-base font-mono">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 active:scale-95 transition text-white font-semibold px-4 py-3 rounded-xl shadow-sm shrink-0 text-sm">
+                            Ekle
+                        </button>
+                    </form>
+                    <p class="text-[11px] text-slate-500 leading-relaxed">
+                        Barkodu yıpranmış kitapları elle yazabilir veya USB barkod okuyucuyu bu kutuya tıklayıp seri okutabilirsiniz.
+                    </p>
+                </div>
+
+                <!-- Dışa Aktarma & Toplu İşlem Butonları -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 space-y-2.5 flex-1 flex flex-col justify-center">
+                    <button id="btnExportExcel" type="button" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] transition text-white font-semibold py-3.5 px-4 rounded-xl shadow-sm flex items-center justify-center gap-2 text-sm sm:text-base">
+                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span>MEB Excel (.xlsx) İndir</span>
+                    </button>
+
+                    <button id="btnCopyIsbns" type="button" class="w-full bg-slate-800 hover:bg-slate-900 active:scale-[0.98] transition text-white font-semibold py-3.5 px-4 rounded-xl shadow-sm flex items-center justify-center gap-2 text-sm sm:text-base">
+                        <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                        <span>Tüm ISBN'leri Kopyala (MEB Toplu)</span>
+                    </button>
+
+                    <button id="btnRetryMissing" type="button" class="w-full bg-amber-50 hover:bg-amber-100 border border-amber-200 active:scale-[0.98] transition text-amber-900 font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Bulunamayanları Tekrar Ara</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- KİTAP LİSTESİ -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+            <!-- Filtre ve Arama Barı -->
+            <div class="p-3.5 sm:p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70">
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                    <button type="button" data-filter="all" class="filter-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 text-white whitespace-nowrap">Tümü</button>
+                    <button type="button" data-filter="found" class="filter-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200/80 text-slate-700 hover:bg-slate-200 whitespace-nowrap">Künyesi Bulunan</button>
+                    <button type="button" data-filter="missing" class="filter-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-200/80 text-slate-700 hover:bg-slate-200 whitespace-nowrap">Bulunamayan / Manuel</button>
+                </div>
+
+                <div class="relative w-full sm:w-64">
+                    <input type="text" id="searchInput" placeholder="ISBN, kitap adı veya yayınevi ara..."
+                        class="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none bg-white">
+                    <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Liste Konteyneri -->
+            <div id="bookListContainer" class="divide-y divide-slate-100"></div>
+
+            <!-- Boş Liste Görünümü -->
+            <div id="emptyState" class="p-10 text-center space-y-2">
+                <div class="w-12 h-12 mx-auto bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                </div>
+                <p class="text-slate-600 font-semibold text-sm">Henüz kitap eklenmedi</p>
+                <p class="text-slate-400 text-xs max-w-sm mx-auto">
+                    Kamerayı başlatıp kitap barkodlarını okutun veya manuel ekleyin. Tüm verileriniz cihazınızda güvenle saklanır.
+                </p>
+            </div>
+        </section>
+
+        <!-- ALT BİLGİ -->
+        <footer class="text-center text-xs text-slate-400 pb-6 px-2 space-y-1">
+            <p>Verileriniz yalnızca kendi cihazınızda (LocalStorage) saklanır. 500 kitaptan fazla kayıt otomatik olarak 500'lük MEB Excel paketlerine bölünür.</p>
+            <p>Türkçe künye bulunamasa bile "Tüm ISBN'leri Kopyala" ile MEB Otomasyonu Toplu ISBN ekranına yapıştırabilirsiniz.</p>
+        </footer>
+    </main>
+
+    <!-- TOPLU ISBN YAPIŞTIRMA MODALI -->
+    <div id="bulkModal" class="hidden fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-bold text-slate-800">Toplu ISBN Yapıştır</h3>
+                <button id="btnCloseBulkModal" type="button" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <p class="text-xs sm:text-sm text-slate-600">
+                Her satıra bir ISBN gelecek şekilde yapıştırın (tire ve boşluklar otomatik temizlenir).
+            </p>
+            <textarea id="bulkIsbnInput" rows="7" placeholder="9789750719387&#10;9786053609902&#10;9789753638029"
+                class="w-full p-3.5 rounded-xl border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none text-sm font-mono"></textarea>
+            <div class="flex items-center justify-end gap-2.5">
+                <button id="btnCancelBulk" type="button" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">
+                    İptal
+                </button>
+                <button id="btnSubmitBulk" type="button" class="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition">
+                    Listeye Ekle
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ÖZEL ONAY MODALI (alert/confirm yerine) -->
+    <div id="confirmModal" class="hidden fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5 space-y-4">
+            <div class="space-y-1.5">
+                <h3 id="modalTitle" class="text-base font-bold text-slate-800">Onay Gerekli</h3>
+                <p id="modalMessage" class="text-sm text-slate-600 leading-relaxed"></p>
+            </div>
+            <div class="flex items-center justify-end gap-2.5 pt-1">
+                <button id="modalCancelBtn" type="button" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">
+                    İptal
+                </button>
+                <button id="modalConfirmBtn" type="button" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition">
+                    Onayla
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * MEB Okul Kütüphane Barkod & Excel Aracı (v2 - iPad/iPhone Safari & Türkçe Kaynaklı)
+         * - iOS/iPadOS Safari kesintisiz kamera tarama (playsinline, muted, autoplay zorlaması)
+         * - 4 katmanlı asenkron künye arama: Google Books -> Google TR -> Kitapyurdu -> Open Library
+         * - Sadece ISBN Modu (Ultra Hızlı), Çoklu Nüsha (varsayılan açık), 500'lük MEB Excel (.xlsx)
+         */
+
+        const STORAGE_KEY = 'meb_kutuphane_kitaplar_v2';
+        const LEGACY_STORAGE_KEY = 'meb_kutuphane_kitaplar_v1';
+        const SETTINGS_KEY = 'meb_kutuphane_ayarlar_v2';
+        const MEB_CHUNK_SIZE = 500;
+        const SCAN_COOLDOWN_MS = 2500; // Aynı barkod için 2.5 sn koruma
+
+        // Uygulama Durumu
+        let books = [];
+        let settings = {
+            allowDuplicates: true,   // Varsayılan açık: aynı kitabın birden fazla nüshası okutulabilir
+            isbnOnlyMode: false,     // Sadece ISBN Modu (Ultra Hızlı)
+            soundEnabled: true
+        };
+        let currentFilter = 'all';
+        let searchQuery = '';
+
+        // Kamera ve Ses Değişkenleri
+        let html5QrCode = null;
+        let isCameraRunning = false;
+        let isTorchOn = false;
+        let lastScannedMap = {};
+        let audioCtx = null;
+        let videoObserver = null;
+
+        // API Sorgu Kuyruğu
+        let fetchQueue = [];
+        let isProcessingQueue = false;
+
+        // DOM Elemanları
+        const elStatTotal = document.getElementById('statTotal');
+        const elStatPackages = document.getElementById('statPackages');
+        const elStatFound = document.getElementById('statFound');
+        const elStatMissing = document.getElementById('statMissing');
+        const elBookList = document.getElementById('bookListContainer');
+        const elEmptyState = document.getElementById('emptyState');
+        const elToggleDuplicates = document.getElementById('toggleAllowDuplicates');
+        const elToggleIsbnOnly = document.getElementById('toggleIsbnOnlyMode');
+        const elCameraWrapper = document.getElementById('cameraWrapper');
+        const elScanFlash = document.getElementById('scanFlashOverlay');
+        const elCameraPlaceholder = document.getElementById('cameraPlaceholder');
+        const elCameraStatusBadge = document.getElementById('cameraStatusBadge');
+        const elCameraErrorBox = document.getElementById('cameraErrorBox');
+        const elBtnStartCamera = document.getElementById('btnStartCamera');
+        const elBtnStopCamera = document.getElementById('btnStopCamera');
+        const elBtnRefreshCamera = document.getElementById('btnRefreshCamera');
+        const elBtnTorch = document.getElementById('btnTorch');
+        const elTorchLabel = document.getElementById('torchLabel');
+        const elQueueBadge = document.getElementById('queueStatusBadge');
+
+        // ==========================================
+        // 1. BAŞLATMA VE LOCALSTORAGE
+        // ==========================================
+        function init() {
+            loadFromStorage();
+            elToggleDuplicates.checked = settings.allowDuplicates;
+            elToggleIsbnOnly.checked = settings.isbnOnlyMode;
+            updateSoundIcon();
+
+            bindEvents();
+            renderList();
+            updateStats();
+
+            // Yarıda kalmış 'loading' kayıtları varsa yeniden kuyruğa al
+            if (!settings.isbnOnlyMode) {
+                books.forEach(b => {
+                    if (b.status === 'loading') {
+                        enqueueBookFetch(b.id, b.isbn);
+                    }
+                });
+            }
+        }
+
+        function loadFromStorage() {
+            try {
+                const savedBooks = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+                if (savedBooks) {
+                    books = JSON.parse(savedBooks);
+                }
+                const savedSettings = localStorage.getItem(SETTINGS_KEY);
+                if (savedSettings) {
+                    settings = { ...settings, ...JSON.parse(savedSettings) };
+                }
+            } catch (err) {
+                console.error('LocalStorage okuma hatası:', err);
+            }
+        }
+
+        function saveToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+                localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+            } catch (err) {
+                console.error('LocalStorage yazma hatası:', err);
+                showToast('Cihaz hafızası dolu olabilir, lütfen Excel yedeği alın.', 'error');
+            }
+        }
+
+        // ==========================================
+        // 2. iOS SAFARI SES KİLİDİ VE BİLDİRİMLER
+        // ==========================================
+        function unlockAudioContext() {
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) return;
+                if (!audioCtx) {
+                    audioCtx = new AudioContextClass();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                // iOS Safari için sessiz bir kısa tampon çalarak ses kilidini tamamen aç
+                const buffer = audioCtx.createBuffer(1, 1, 22050);
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start(0);
+            } catch (e) {
+                // Ses desteklenmiyorsa sessizce geç
+            }
+        }
+
+        function playBeep(type = 'success') {
+            if (!settings.soundEnabled) return;
+            try {
+                if (!audioCtx) unlockAudioContext();
+                if (!audioCtx) return;
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'success') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1174.66, audioCtx.currentTime); // D6 net bip
+                    gain.gain.setValueAtTime(0.22, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.13);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.13);
+                } else {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.2);
+                }
+            } catch (e) {}
+        }
+
+        function triggerGreenFlash() {
+            elCameraWrapper.classList.add('ring-4', 'ring-emerald-400');
+            elScanFlash.classList.remove('animate-scan-flash');
+            void elScanFlash.offsetWidth; // Reflow ile animasyonu sıfırla
+            elScanFlash.classList.add('animate-scan-flash');
+
+            setTimeout(() => {
+                elCameraWrapper.classList.remove('ring-4', 'ring-emerald-400');
+            }, 450);
+        }
+
+        function updateSoundIcon() {
+            document.getElementById('iconSoundOn').classList.toggle('hidden', !settings.soundEnabled);
+            document.getElementById('iconSoundOff').classList.toggle('hidden', settings.soundEnabled);
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            // Çok fazla toast birikmesini önle (en fazla 2 tane görünsün)
+            while (container.children.length >= 2) {
+                container.firstChild.remove();
+            }
+
+            const styles = {
+                success: 'bg-emerald-600 text-white',
+                warning: 'bg-amber-500 text-white',
+                error: 'bg-rose-600 text-white',
+                info: 'bg-slate-800 text-white'
+            };
+
+            const toast = document.createElement('div');
+            toast.className = `${styles[type] || styles.info} px-4 py-3 rounded-xl shadow-lg text-xs sm:text-sm font-semibold flex items-center justify-between gap-2 pointer-events-auto transition-all duration-200 opacity-0 -translate-y-2`;
+            toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('opacity-0', '-translate-y-2');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', '-translate-y-2');
+                setTimeout(() => toast.remove(), 220);
+            }, 2400);
+        }
+
+        function showConfirmModal({ title, message, confirmText = 'Onayla', confirmColor = 'bg-indigo-600 hover:bg-indigo-700' }) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirmModal');
+                document.getElementById('modalTitle').textContent = title;
+                document.getElementById('modalMessage').textContent = message;
+                const btnCancel = document.getElementById('modalCancelBtn');
+                const btnConfirm = document.getElementById('modalConfirmBtn');
+                btnConfirm.textContent = confirmText;
+                btnConfirm.className = `px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition ${confirmColor}`;
+                modal.classList.remove('hidden');
+
+                const cleanup = (result) => {
+                    modal.classList.add('hidden');
+                    btnCancel.onclick = null;
+                    btnConfirm.onclick = null;
+                    resolve(result);
+                };
+                btnCancel.onclick = () => cleanup(false);
+                btnConfirm.onclick = () => cleanup(true);
+            });
+        }
+
+        // ==========================================
+        // 3. iOS / iPadOS SAFARI UYUMLU KAMERA YÖNETİMİ
+        // ==========================================
+        function enforceIosVideoAttributes() {
+            const readerEl = document.getElementById('qr-reader');
+            const applyAttrs = () => {
+                const video = readerEl.querySelector('video');
+                if (video) {
+                    video.setAttribute('playsinline', 'true');
+                    video.setAttribute('webkit-playsinline', 'true');
+                    video.setAttribute('muted', 'true');
+                    video.setAttribute('autoplay', 'true');
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.autoplay = true;
+                }
+            };
+            applyAttrs();
+            if (videoObserver) videoObserver.disconnect();
+            videoObserver = new MutationObserver(applyAttrs);
+            videoObserver.observe(readerEl, { childList: true, subtree: true });
+        }
+
+        async function startCamera() {
+            elCameraErrorBox.classList.add('hidden');
+            // iOS Safari ses kilidini kullanıcı dokunuşu anında aç
+            unlockAudioContext();
+
+            if (typeof Html5Qrcode === 'undefined') {
+                showCameraError('Barkod kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin.');
+                return;
+            }
+
+            try {
+                if (isCameraRunning) {
+                    await stopCamera();
+                }
+
+                enforceIosVideoAttributes();
+
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode('qr-reader', {
+                        formatsToSupport: [
+                            Html5QrcodeSupportedFormats.EAN_13,
+                            Html5QrcodeSupportedFormats.EAN_8,
+                            Html5QrcodeSupportedFormats.UPC_A,
+                            Html5QrcodeSupportedFormats.CODE_128
+                        ],
+                        verbose: false
+                    });
+                }
+
+                // Yatay kitap barkodlarına uygun dikdörtgen tarama kutusu
+                const config = {
+                    fps: 12,
+                    qrbox: (viewfinderWidth, viewfinderHeight) => {
+                        const width = Math.max(Math.floor(viewfinderWidth * 0.85), 220);
+                        const height = Math.min(140, Math.floor(viewfinderHeight * 0.55));
+                        return { width, height: Math.max(height, 100) };
+                    },
+                    disableFlip: false
+                };
+
+                await html5QrCode.start(
+                    { facingMode: 'environment' },
+                    config,
+                    onBarcodeScanned,
+                    () => {} // Tarama sırasında boş kare hatalarını yoksay
+                );
+
+                // Video elementine iOS özelliklerini tekrar garanti altına al
+                enforceIosVideoAttributes();
+
+                isCameraRunning = true;
+                isTorchOn = false;
+                elCameraPlaceholder.classList.add('hidden');
+                elCameraStatusBadge.classList.remove('hidden');
+                elBtnStartCamera.classList.add('hidden');
+                elBtnStopCamera.classList.remove('hidden');
+                elBtnRefreshCamera.classList.remove('hidden');
+
+                // Flaş (Torch) desteği kontrolü
+                checkTorchSupport();
+            } catch (err) {
+                console.error('Kamera başlatma hatası:', err);
+                let msg = 'Kamera başlatılamadı. Lütfen Safari ayarlarından kamera iznine onay verin.';
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    msg = 'iPad ve iPhone Safari, güvenlik gereği kamerayı yalnızca HTTPS adreslerinde (ör. Netlify Drop, GitHub Pages) açar. Dosyayı doğrudan cihazdan açtıysanız kamera izni verilmez.';
+                }
+                showCameraError(msg);
+            }
+        }
+
+        function checkTorchSupport() {
+            try {
+                const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+                if (capabilities && capabilities.torchFeature && capabilities.torchFeature().isSupported()) {
+                    elBtnTorch.classList.remove('hidden');
+                    elTorchLabel.textContent = 'Flaş Aç';
+                } else {
+                    elBtnTorch.classList.add('hidden');
+                }
+            } catch (e) {
+                elBtnTorch.classList.add('hidden');
+            }
+        }
+
+        async function toggleTorch() {
+            if (!html5QrCode || !isCameraRunning) return;
+            try {
+                const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+                const torchFeature = capabilities && capabilities.torchFeature ? capabilities.torchFeature() : null;
+                if (torchFeature && torchFeature.isSupported()) {
+                    isTorchOn = !isTorchOn;
+                    await torchFeature.apply(isTorchOn);
+                    elTorchLabel.textContent = isTorchOn ? 'Flaş Kapat' : 'Flaş Aç';
+                    elBtnTorch.classList.toggle('bg-amber-400', isTorchOn);
+                    elBtnTorch.classList.toggle('bg-amber-100', !isTorchOn);
+                }
+            } catch (e) {
+                showToast('Bu cihazda flaş kontrolü desteklenmiyor.', 'info');
+            }
+        }
+
+        async function stopCamera() {
+            if (!html5QrCode || !isCameraRunning) return;
+            try {
+                await html5QrCode.stop();
+            } catch (err) {
+                console.warn('Kamera durdurma uyarısı:', err);
+            } finally {
+                isCameraRunning = false;
+                isTorchOn = false;
+                if (videoObserver) videoObserver.disconnect();
+                elCameraPlaceholder.classList.remove('hidden');
+                elCameraStatusBadge.classList.add('hidden');
+                elBtnStartCamera.classList.remove('hidden');
+                elBtnStopCamera.classList.add('hidden');
+                elBtnRefreshCamera.classList.add('hidden');
+                elBtnTorch.classList.add('hidden');
+            }
+        }
+
+        async function refreshCamera() {
+            showToast('Kamera yenileniyor...', 'info');
+            await stopCamera();
+            setTimeout(() => {
+                startCamera();
+            }, 350);
+        }
+
+        function showCameraError(msg) {
+            elCameraErrorBox.textContent = msg;
+            elCameraErrorBox.classList.remove('hidden');
+        }
+
+        // Kesintisiz Barkod Okuma Callback'i (Kamerayı ASLA durdurmaz)
+        function onBarcodeScanned(decodedText) {
+            const cleaned = cleanIsbn(decodedText);
+            if (!cleaned) return;
+
+            const now = Date.now();
+            // Aynı barkod için 2.5 sn bekleme (cooldown), farklı kitap anında okunur
+            if (lastScannedMap[cleaned] && (now - lastScannedMap[cleaned]) < SCAN_COOLDOWN_MS) {
+                return;
+            }
+            lastScannedMap[cleaned] = now;
+
+            handleAddIsbn(cleaned, { fromCamera: true });
+        }
+
+        // ==========================================
+        // 4. ISBN DOĞRULAMA, EKLEME VE 4 KATMANLI ARAMA
+        // ==========================================
+        function cleanIsbn(raw) {
+            if (!raw) return '';
+            const cleaned = String(raw).replace(/[^0-9Xx]/g, '').toUpperCase();
+            if (cleaned.length === 13 || cleaned.length === 10) {
+                return cleaned;
+            }
+            return '';
+        }
+
+        function handleAddIsbn(isbn, options = { fromCamera: false, isBulk: false }) {
+            const existing = books.find(b => b.isbn === isbn);
+
+            // Çoklu nüsha kapalıysa ve ISBN listede varsa engelle
+            if (existing && !settings.allowDuplicates) {
+                if (!options.isBulk) {
+                    playBeep('warning');
+                    showToast(`Bu ISBN zaten listede: ${existing.title || isbn}`, 'warning');
+                }
+                return false;
+            }
+
+            if (!options.isBulk) {
+                playBeep('success');
+                if (options.fromCamera) triggerGreenFlash();
+            }
+
+            const newId = 'bk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const hasExistingMeta = existing && existing.title && existing.title.trim() !== '';
+
+            let initialStatus = 'loading';
+            if (settings.isbnOnlyMode) {
+                initialStatus = 'isbn_only';
+            } else if (hasExistingMeta) {
+                initialStatus = 'found';
+            }
+
+            const newBook = {
+                id: newId,
+                isbn: isbn,
+                demirbas: '',
+                year: hasExistingMeta ? (existing.year || '') : '',
+                title: hasExistingMeta ? (existing.title || '') : '',
+                edition: hasExistingMeta ? (existing.edition || '1') : '1',
+                publisher: hasExistingMeta ? (existing.publisher || '') : '',
+                source: hasExistingMeta ? (existing.source || '') : '',
+                status: initialStatus
+            };
+
+            // Satırı ANINDA listeye ekle (taramayı hiç bekletme)
+            books.unshift(newBook);
+            saveToStorage();
+            renderList();
+            updateStats();
+
+            if (!options.isBulk) {
+                if (existing) {
+                    showToast(`Aynı ISBN yeni nüsha olarak eklendi: ${isbn}`, 'warning');
+                } else if (settings.isbnOnlyMode) {
+                    showToast(`ISBN eklendi (Hızlı Mod): ${isbn}`, 'success');
+                } else {
+                    showToast(`Barkod okundu: ${isbn}`, 'success');
+                }
+            }
+
+            // Arka planda asenkron künye sorgusu başlat
+            if (newBook.status === 'loading') {
+                enqueueBookFetch(newId, isbn);
+            }
+            return true;
+        }
+
+        // Asenkron Sorgu Kuyruğu
+        function enqueueBookFetch(bookId, isbn) {
+            if (fetchQueue.some(q => q.bookId === bookId)) return;
+            fetchQueue.push({ bookId, isbn });
+            updateQueueIndicator();
+            if (!isProcessingQueue) {
+                processFetchQueue();
+            }
+        }
+
+        async function processFetchQueue() {
+            if (isProcessingQueue) return;
+            isProcessingQueue = true;
+
+            while (fetchQueue.length > 0) {
+                const item = fetchQueue.shift();
+                updateQueueIndicator();
+
+                const existsIdx = books.findIndex(b => b.id === item.bookId);
+                if (existsIdx === -1) continue;
+
+                const info = await searchBookMetadataMultiSource(item.isbn);
+                const latestIdx = books.findIndex(b => b.id === item.bookId);
+                if (latestIdx !== -1) {
+                    if (info.title) {
+                        books[latestIdx].title = books[latestIdx].title || info.title;
+                        books[latestIdx].publisher = books[latestIdx].publisher || info.publisher;
+                        books[latestIdx].year = books[latestIdx].year || info.year;
+                        books[latestIdx].source = info.source;
+                        books[latestIdx].status = 'found';
+                    } else {
+                        books[latestIdx].status = 'missing';
+                        books[latestIdx].source = '';
+                    }
+                    saveToStorage();
+                    renderList();
+                    updateStats();
+                }
+
+                // Art arda sorgularda kısa nefes payı
+                if (fetchQueue.length > 0) {
+                    await new Promise(r => setTimeout(r, 220));
+                }
+            }
+
+            isProcessingQueue = false;
+            updateQueueIndicator();
+        }
+
+        function updateQueueIndicator() {
+            if (fetchQueue.length > 0) {
+                elQueueBadge.textContent = `Aranıyor: ${fetchQueue.length}`;
+                elQueueBadge.classList.remove('hidden');
+            } else {
+                elQueueBadge.classList.add('hidden');
+            }
+        }
+
+        // Timeout destekli fetch yardımcısı
+        async function fetchWithTimeout(url, timeoutMs = 5000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, { signal: controller.signal });
+                return res;
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        /**
+         * 4 Katmanlı Türkçe Kitap Künye Arama Motoru:
+         * 1) Google Books (isbn:)
+         * 2) Google Books Geniş Arama (langRestrict=tr)
+         * 3) Kitapyurdu (allorigins CORS vekili, 5 sn timeout, DOMParser)
+         * 4) Open Library
+         */
+        async function searchBookMetadataMultiSource(isbn) {
+            const empty = { title: '', publisher: '', year: '', source: '' };
+
+            // a) Google Books API (Doğrudan ISBN)
+            try {
+                const res = await fetchWithTimeout(
+                    `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`,
+                    5000
+                );
+                if (res.ok) {
+                    const data = await res.json();
+                    const parsed = parseGoogleBooksItem(data, 'Google');
+                    if (parsed.title) return parsed;
+                }
+            } catch (e) {}
+
+            // b) Google Books Geniş Arama (Türkçe yerli kitaplar için isbn: öneki olmadan)
+            try {
+                const res = await fetchWithTimeout(
+                    `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(isbn)}&langRestrict=tr`,
+                    5000
+                );
+                if (res.ok) {
+                    const data = await res.json();
+                    const parsed = parseGoogleBooksItem(data, 'Google TR');
+                    if (parsed.title) return parsed;
+                }
+            } catch (e) {}
+
+            // c) Türkçe Kitap Kaynağı: Kitapyurdu (allorigins CORS vekili ile)
+            try {
+                const kyTarget = `https://www.kitapyurdu.com/index.php?route=product/search&filter_name=${encodeURIComponent(isbn)}`;
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(kyTarget)}`;
+                const res = await fetchWithTimeout(proxyUrl, 5000);
+                if (res.ok) {
+                    const htmlText = await res.text();
+                    const parsed = parseKitapyurduHtml(htmlText);
+                    if (parsed.title) return parsed;
+                }
+            } catch (e) {}
+
+            // d) Open Library API
+            try {
+                const res = await fetchWithTimeout(
+                    `https://openlibrary.org/api/books?bibkeys=ISBN:${encodeURIComponent(isbn)}&format=json&jscmd=data`,
+                    5000
+                );
+                if (res.ok) {
+                    const data = await res.json();
+                    const key = `ISBN:${isbn}`;
+                    if (data[key]) {
+                        const v = data[key];
+                        const title = (v.title || '').trim();
+                        let publisher = '';
+                        if (Array.isArray(v.publishers) && v.publishers.length > 0) {
+                            publisher = (v.publishers[0].name || '').trim();
+                        }
+                        let year = '';
+                        if (v.publish_date) {
+                            const m = String(v.publish_date).match(/\d{4}/);
+                            if (m) year = m[0];
+                        }
+                        if (title) {
+                            return { title, publisher, year, source: 'OpenLibrary' };
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            return empty;
+        }
+
+        function parseGoogleBooksItem(data, sourceLabel) {
+            if (!data || !data.totalItems || !Array.isArray(data.items) || data.items.length === 0) {
+                return { title: '', publisher: '', year: '', source: '' };
+            }
+            const v = data.items[0].volumeInfo || {};
+            const title = (v.title || '').trim();
+            const publisher = (v.publisher || '').trim();
+            let year = '';
+            if (v.publishedDate) {
+                const m = String(v.publishedDate).match(/\d{4}/);
+                if (m) year = m[0];
+            }
+            return { title, publisher, year, source: title ? sourceLabel : '' };
+        }
+
+        function parseKitapyurduHtml(htmlText) {
+            if (!htmlText) return { title: '', publisher: '', year: '', source: '' };
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+                const card = doc.querySelector('.product-cr');
+                if (!card) return { title: '', publisher: '', year: '', source: '' };
+
+                const nameEl = card.querySelector('.name a span') || card.querySelector('.name a');
+                const pubEl = card.querySelector('.publisher a span') || card.querySelector('.publisher');
+
+                const title = nameEl ? nameEl.textContent.trim() : '';
+                const publisher = pubEl ? pubEl.textContent.trim() : '';
+
+                if (title) {
+                    return { title, publisher, year: '', source: 'Kitapyurdu' };
+                }
+            } catch (e) {}
+            return { title: '', publisher: '', year: '', source: '' };
+        }
+
+        // ==========================================
+        // 5. LİSTE RENDER VE SATIR İÇİ DÜZENLEME
+        // ==========================================
+        function updateStats() {
+            const total = books.length;
+            const found = books.filter(b => b.title && b.title.trim() !== '').length;
+            const missing = books.filter(b => (!b.title || b.title.trim() === '') && b.status !== 'loading').length;
+            const packages = Math.max(1, Math.ceil(total / MEB_CHUNK_SIZE));
+
+            elStatTotal.textContent = total;
+            elStatFound.textContent = found;
+            elStatMissing.textContent = missing;
+            elStatPackages.textContent = `${packages} paket`;
+        }
+
+        function getFilteredBooks() {
+            return books.filter(b => {
+                const hasTitle = b.title && b.title.trim() !== '';
+                if (currentFilter === 'found' && !hasTitle) return false;
+                if (currentFilter === 'missing' && hasTitle) return false;
+
+                if (searchQuery) {
+                    const q = searchQuery.toLowerCase();
+                    const hay = `${b.isbn} ${b.title} ${b.publisher} ${b.demirbas} ${b.year} ${b.source || ''}`.toLowerCase();
+                    if (!hay.includes(q)) return false;
+                }
+                return true;
+            });
+        }
+
+        function renderList() {
+            const filtered = getFilteredBooks();
+
+            if (books.length === 0) {
+                elBookList.innerHTML = '';
+                elEmptyState.classList.remove('hidden');
+                return;
+            }
+            elEmptyState.classList.add('hidden');
+
+            if (filtered.length === 0) {
+                elBookList.innerHTML = `<div class="p-8 text-center text-sm text-slate-500">Arama veya filtreye uygun kitap bulunamadı.</div>`;
+                return;
+            }
+
+            elBookList.innerHTML = filtered.map(book => {
+                const hasTitle = book.title && book.title.trim() !== '';
+                const isLoading = book.status === 'loading';
+                const isMissing = !hasTitle && !isLoading;
+
+                let statusBadge = '';
+                if (isLoading) {
+                    statusBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700">
+                        <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                        Aranıyor...
+                    </span>`;
+                } else if (hasTitle) {
+                    const srcBadge = book.source
+                        ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">${escapeHtml(book.source)}</span>`
+                        : '';
+                    statusBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">Hazır</span> ${srcBadge}`;
+                } else if (book.status === 'isbn_only') {
+                    statusBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-sky-100 text-sky-800">Sadece ISBN</span>`;
+                } else {
+                    statusBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">Manuel / MEB'de Bulunur</span>`;
+                }
+
+                const kySearchUrl = `https://www.kitapyurdu.com/index.php?route=product/search&filter_name=${encodeURIComponent(book.isbn)}`;
+
+                return `
+                <div class="p-3.5 sm:p-4 transition ${isMissing ? 'bg-amber-50/35' : 'hover:bg-slate-50/80'}" data-book-id="${book.id}">
+                    <!-- Üst Satır: Sıra, ISBN, Durum & Kaynak Etiketi, Aksiyonlar -->
+                    <div class="flex items-center justify-between gap-2 mb-2.5 flex-wrap">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-xs font-bold text-slate-400">#${books.length - books.indexOf(book)}</span>
+                            <span class="font-mono text-xs sm:text-sm font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-lg">${escapeHtml(book.isbn)}</span>
+                            ${statusBadge}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <a href="${kySearchUrl}" target="_blank" rel="noopener noreferrer"
+                                class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200/70 transition">
+                                Kitapyurdu'nda Ara
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                            </a>
+                            <button type="button" onclick="retryFetchBook('${book.id}')" title="Künyeyi Tekrar Ara"
+                                class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+                            <button type="button" onclick="deleteBook('${book.id}')" title="Satırı Sil"
+                                class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Satır İçi Düzenleme Alanları -->
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                        <div class="sm:col-span-4">
+                            <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Başlık (Kitap Adı)</label>
+                            <input type="text" value="${escapeAttr(book.title)}" placeholder="Kitap adı..."
+                                oninput="updateBookField('${book.id}', 'title', this.value)"
+                                class="w-full px-2.5 py-2 text-xs sm:text-sm rounded-lg border ${isMissing ? 'border-amber-300 bg-white' : 'border-slate-200 bg-white'} focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none">
+                        </div>
+
+                        <div class="sm:col-span-3">
+                            <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Yayınevi</label>
+                            <input type="text" value="${escapeAttr(book.publisher)}" placeholder="Yayınevi..."
+                                oninput="updateBookField('${book.id}', 'publisher', this.value)"
+                                class="w-full px-2.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none">
+                        </div>
+
+                        <div class="grid grid-cols-3 sm:col-span-5 gap-2">
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Basım Yılı</label>
+                                <input type="text" inputmode="numeric" value="${escapeAttr(book.year)}" placeholder="2024"
+                                    oninput="updateBookField('${book.id}', 'year', this.value)"
+                                    class="w-full px-2.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Basım Sayısı</label>
+                                <input type="text" inputmode="numeric" value="${escapeAttr(book.edition)}" placeholder="1"
+                                    oninput="updateBookField('${book.id}', 'edition', this.value)"
+                                    class="w-full px-2.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Demirbaş</label>
+                                <input type="text" value="${escapeAttr(book.demirbas)}" placeholder="Boş"
+                                    oninput="updateBookField('${book.id}', 'demirbas', this.value)"
+                                    class="w-full px-2.5 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200 outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // Global Satır Fonksiyonları
+        window.updateBookField = function(id, field, value) {
+            const book = books.find(b => b.id === id);
+            if (!book) return;
+            book[field] = value;
+            if (field === 'title' && value.trim() !== '') {
+                book.status = 'found';
+                if (!book.source) book.source = 'Manuel';
+            }
+            saveToStorage();
+            updateStats();
+        };
+
+        window.deleteBook = function(id) {
+            books = books.filter(b => b.id !== id);
+            saveToStorage();
+            renderList();
+            updateStats();
+            showToast('Kitap silindi.', 'info');
+        };
+
+        window.retryFetchBook = function(id) {
+            const book = books.find(b => b.id === id);
+            if (!book) return;
+            book.status = 'loading';
+            renderList();
+            enqueueBookFetch(book.id, book.isbn);
+            showToast('Künye yeniden aranıyor...', 'info');
+        };
+
+        function retryAllMissing() {
+            const targets = books.filter(b => (!b.title || b.title.trim() === '') && b.status !== 'loading');
+            if (targets.length === 0) {
+                showToast('Tekrar aranacak eksik kitap yok.', 'info');
+                return;
+            }
+            targets.forEach(b => {
+                b.status = 'loading';
+                enqueueBookFetch(b.id, b.isbn);
+            });
+            renderList();
+            showToast(`${targets.length} eksik kitap için 4 kaynakta yeniden arama başlatıldı.`, 'success');
+        }
+
+        // ==========================================
+        // 6. MEB EXCEL (.XLSX) VE iOS KOPYALAMA
+        // ==========================================
+        function exportToMebExcel() {
+            if (books.length === 0) {
+                showToast('İndirilecek kitap bulunmuyor.', 'warning');
+                return;
+            }
+            if (typeof XLSX === 'undefined') {
+                showToast('Excel kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin.', 'error');
+                return;
+            }
+
+            // İlk okutulan kitap 1. satırda olsun
+            const ordered = [...books].reverse();
+            const totalChunks = Math.ceil(ordered.length / MEB_CHUNK_SIZE);
+            const headers = ['ISBN', 'Demirbaş', 'Basım Yılı', 'Başlık', 'Basım Sayısı', 'Yayınevi'];
+
+            for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+                const start = chunkIdx * MEB_CHUNK_SIZE;
+                const chunk = ordered.slice(start, start + MEB_CHUNK_SIZE);
+
+                const aoa = [headers];
+                chunk.forEach(b => {
+                    aoa.push([
+                        String(b.isbn || '').trim(),
+                        String(b.demirbas || '').trim(),
+                        String(b.year || '').trim(),
+                        String(b.title || '').trim(),
+                        String(b.edition || '1').trim(),
+                        String(b.publisher || '').trim()
+                    ]);
+                });
+
+                const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+                // ISBN sütunundaki (A sütunu) tüm hücreleri kesinlikle METİN (t: 's', z: '@') yap
+                for (let r = 1; r <= chunk.length; r++) {
+                    const cellRef = XLSX.utils.encode_cell({ r, c: 0 });
+                    if (ws[cellRef]) {
+                        ws[cellRef].t = 's';
+                        ws[cellRef].z = '@';
+                        ws[cellRef].v = String(ws[cellRef].v);
+                    }
+                }
+
+                ws['!cols'] = [
+                    { wch: 16 },
+                    { wch: 12 },
+                    { wch: 11 },
+                    { wch: 38 },
+                    { wch: 13 },
+                    { wch: 24 }
+                ];
+
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Kitaplar');
+
+                const fileName = `meb_kutuphane_paket_${chunkIdx + 1}.xlsx`;
+                setTimeout(() => {
+                    XLSX.writeFile(wb, fileName);
+                }, chunkIdx * 500);
+            }
+
+            if (totalChunks > 1) {
+                showToast(`${ordered.length} kitap ${totalChunks} adet 500'lük MEB paketi olarak indiriliyor.`, 'success');
+            } else {
+                showToast(`${ordered.length} kitap MEB Excel (.xlsx) olarak indirildi.`, 'success');
+            }
+        }
+
+        // iOS Safari ve iframe uyumlu panoya kopyalama
+        function copyAllIsbns() {
+            if (books.length === 0) {
+                showToast('Kopyalanacak ISBN bulunmuyor.', 'warning');
+                return;
+            }
+            const text = [...books].reverse().map(b => b.isbn).join('\n');
+
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.top = '0';
+            textarea.style.left = '-9999px';
+            textarea.style.fontSize = '16px'; // iOS Safari zoom engelleme
+            document.body.appendChild(textarea);
+
+            // iOS Safari seçim uyumluluğu
+            const range = document.createRange();
+            range.selectNodeContents(textarea);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            textarea.setSelectionRange(0, 999999);
+
+            let copied = false;
+            try {
+                copied = document.execCommand('copy');
+            } catch (err) {
+                copied = false;
+            }
+            document.body.removeChild(textarea);
+
+            if (copied) {
+                showToast(`${books.length} adet ISBN kopyalandı! MEB Toplu ISBN ekranına yapıştırabilirsiniz.`, 'success');
+            } else {
+                showToast('Kopyalama başarısız oldu.', 'error');
+            }
+        }
+
+        // ==========================================
+        // 7. OLAY DİNLEYİCİLERİ
+        // ==========================================
+        function bindEvents() {
+            // Ayar anahtarları
+            elToggleDuplicates.addEventListener('change', (e) => {
+                settings.allowDuplicates = e.target.checked;
+                saveToStorage();
+                showToast(settings.allowDuplicates ? 'Çoklu nüsha açık.' : 'Aynı ISBN tekrar eklenmeyecek.', 'info');
+            });
+
+            elToggleIsbnOnly.addEventListener('change', (e) => {
+                settings.isbnOnlyMode = e.target.checked;
+                saveToStorage();
+                showToast(
+                    settings.isbnOnlyMode
+                        ? 'Sadece ISBN Modu açıldı: İnternete sormadan yıldırım hızında toplar.'
+                        : 'Otomatik Türkçe künye arama açıldı.',
+                    'info'
+                );
+            });
+
+            document.getElementById('btnToggleSound').addEventListener('click', () => {
+                settings.soundEnabled = !settings.soundEnabled;
+                saveToStorage();
+                updateSoundIcon();
+                if (settings.soundEnabled) {
+                    unlockAudioContext();
+                    playBeep('success');
+                }
+            });
+
+            // Kamera butonları
+            elBtnStartCamera.addEventListener('click', startCamera);
+            elBtnStopCamera.addEventListener('click', stopCamera);
+            elBtnRefreshCamera.addEventListener('click', refreshCamera);
+            elBtnTorch.addEventListener('click', toggleTorch);
+
+            // Manuel ISBN ekleme
+            document.getElementById('manualForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                unlockAudioContext();
+                const input = document.getElementById('manualIsbnInput');
+                const cleaned = cleanIsbn(input.value);
+                if (!cleaned) {
+                    playBeep('warning');
+                    showToast('Geçerli 10 veya 13 haneli bir ISBN girin.', 'warning');
+                    return;
+                }
+                input.value = '';
+                handleAddIsbn(cleaned, { fromCamera: false });
+                input.focus();
+            });
+
+            // Toplu ISBN Modalı
+            const bulkModal = document.getElementById('bulkModal');
+            const bulkTextarea = document.getElementById('bulkIsbnInput');
+            const closeBulk = () => bulkModal.classList.add('hidden');
+
+            document.getElementById('btnOpenBulkModal').addEventListener('click', () => {
+                bulkModal.classList.remove('hidden');
+                setTimeout(() => bulkTextarea.focus(), 100);
+            });
+            document.getElementById('btnCloseBulkModal').addEventListener('click', closeBulk);
+            document.getElementById('btnCancelBulk').addEventListener('click', closeBulk);
+
+            document.getElementById('btnSubmitBulk').addEventListener('click', () => {
+                const lines = bulkTextarea.value.split(/[\n,;\s]+/);
+                const validIsbns = lines.map(cleanIsbn).filter(Boolean);
+                if (validIsbns.length === 0) {
+                    showToast('Geçerli 10 veya 13 haneli ISBN bulunamadı.', 'warning');
+                    return;
+                }
+
+                let added = 0;
+                let skipped = 0;
+                validIsbns.forEach(isbn => {
+                    if (handleAddIsbn(isbn, { fromCamera: false, isBulk: true })) {
+                        added++;
+                    } else {
+                        skipped++;
+                    }
+                });
+
+                bulkTextarea.value = '';
+                closeBulk();
+
+                if (added > 0) {
+                    const extra = skipped > 0 ? ` (${skipped} tekrar atlandı)` : '';
+                    showToast(`${added} kitap listeye eklendi.${extra}`, 'success');
+                } else {
+                    showToast(`Tüm ISBN'ler (${skipped}) zaten listede mevcut.`, 'info');
+                }
+            });
+
+            // Dışa aktarım ve tekrar arama
+            document.getElementById('btnExportExcel').addEventListener('click', exportToMebExcel);
+            document.getElementById('btnCopyIsbns').addEventListener('click', copyAllIsbns);
+            document.getElementById('btnRetryMissing').addEventListener('click', retryAllMissing);
+
+            // Listeyi Temizle
+            document.getElementById('btnClearAll').addEventListener('click', async () => {
+                if (books.length === 0) {
+                    showToast('Liste zaten boş.', 'info');
+                    return;
+                }
+                const ok = await showConfirmModal({
+                    title: 'Tüm Listeyi Temizle',
+                    message: `Kayıtlı ${books.length} kitabın tamamı silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                    confirmText: 'Evet, Hepsini Sil',
+                    confirmColor: 'bg-rose-600 hover:bg-rose-700'
+                });
+                if (ok) {
+                    books = [];
+                    fetchQueue = [];
+                    saveToStorage();
+                    renderList();
+                    updateStats();
+                    updateQueueIndicator();
+                    showToast('Liste tamamen temizlendi.', 'info');
+                }
+            });
+
+            // Filtreler & Arama
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentFilter = btn.dataset.filter;
+                    document.querySelectorAll('.filter-btn').forEach(b => {
+                        b.classList.remove('bg-indigo-600', 'text-white');
+                        b.classList.add('bg-slate-200/80', 'text-slate-700');
+                    });
+                    btn.classList.add('bg-indigo-600', 'text-white');
+                    btn.classList.remove('bg-slate-200/80', 'text-slate-700');
+                    renderList();
+                });
+            });
+
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                searchQuery = e.target.value.trim();
+                renderList();
+            });
+        }
+
+        // Güvenli HTML Kaçış Fonksiyonları
+        function escapeHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function escapeAttr(str) {
+            return escapeHtml(str).replace(/'/g, '&#39;');
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
